@@ -122,3 +122,54 @@ test('toDisk writes both files, and nothing on throw', (t) => {
   t.absent(fs.existsSync(path.join(out2, 'hrpc.py')))
   t.ok(dir)
 })
+
+test('a handler named receive collides with the transport method', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({
+    name: 'receive',
+    request: { name: 'string', stream: false },
+    response: { name: 'string', stream: false }
+  })
+  try {
+    generatePython(hrpc)
+    t.fail('expected throw')
+  } catch (err) {
+    t.is(err.code, 'DUPLICATE_METHOD_NAME')
+  }
+})
+
+test('a client method and an on_ registration cannot collide', (t) => {
+  const { hrpc } = scaffold()
+  const rpc = hrpc.namespace('test')
+  rpc.register({
+    name: 'foo',
+    request: { name: 'string', stream: false },
+    response: { name: 'string', stream: false }
+  })
+  rpc.register({
+    name: 'on-foo',
+    request: { name: 'string', stream: false },
+    response: { name: 'string', stream: false }
+  })
+  try {
+    generatePython(hrpc)
+    t.fail('expected throw')
+  } catch (err) {
+    t.is(err.code, 'DUPLICATE_METHOD_NAME')
+  }
+})
+
+test('a handler mapping to a python keyword throws', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({
+    name: 'class',
+    request: { name: 'string', stream: false },
+    response: { name: 'string', stream: false }
+  })
+  try {
+    generatePython(hrpc)
+    t.fail('expected throw')
+  } catch (err) {
+    t.is(err.code, 'RESERVED_KEYWORD')
+  }
+})
