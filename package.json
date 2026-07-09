@@ -1,0 +1,34 @@
+{
+  "name": "hrpc-python",
+  "version": "0.0.1",
+  "description": "Python code generation for HRPC",
+  "exports": {
+    "./package": "./package.json",
+    ".": "./index.js"
+  },
+  "files": [
+    "lib",
+    "index.js"
+  ],
+  "scripts": {
+    "test": "brittle test.js",
+    "lint": "prettier --check . && lunte",
+    "format": "prettier --write . && lunte --fix"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holepunchto/hrpc-python.git"
+  },
+  "author": "Holepunch",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "hrpc": "^4.3.0"
+  },
+  "devDependencies": {
+    "brittle": "^3.0.0",
+    "hyperschema-python": "^0.0.1",
+    "lunte": "^1.6.0",
+    "prettier": "^3.3.3",
+    "prettier-config-holepunch": "^2.0.0"
+  }
+}
