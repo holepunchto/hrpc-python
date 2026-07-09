@@ -18,6 +18,20 @@ function scaffold() {
   return { dir, hrpc: PythonHRPC.from(dir, dir) }
 }
 
+test('golden: unary + send output is byte-for-byte stable', (t) => {
+  const { hrpc } = scaffold()
+  const rpc = hrpc.namespace('test')
+  rpc.register({
+    name: 'command-a',
+    request: { name: '@test/req', stream: false },
+    response: { name: '@test/res', stream: false }
+  })
+  rpc.register({ name: 'notify', request: { name: 'string', stream: false, send: true } })
+
+  const expected = fs.readFileSync(path.join(__dirname, 'golden', 'unary_send.hrpc.py'), 'utf-8')
+  t.is(generatePython(hrpc), expected, 'generated unary+send matches the golden fixture')
+})
+
 test('unary + send generate the expected class shape', (t) => {
   const { hrpc } = scaffold()
   const rpc = hrpc.namespace('test')
