@@ -18,6 +18,20 @@ function scaffold() {
   return { dir, hrpc: PythonHRPC.from(dir, dir) }
 }
 
+test('golden: unary + send output is byte-for-byte stable', (t) => {
+  const { hrpc } = scaffold()
+  const rpc = hrpc.namespace('test')
+  rpc.register({
+    name: 'command-a',
+    request: { name: '@test/req', stream: false },
+    response: { name: '@test/res', stream: false }
+  })
+  rpc.register({ name: 'notify', request: { name: 'string', stream: false, send: true } })
+
+  const expected = fs.readFileSync(path.join(__dirname, 'golden', 'unary_send.hrpc.py'), 'utf-8')
+  t.is(generatePython(hrpc), expected, 'generated unary+send matches the golden fixture')
+})
+
 test('unary + send generate the expected class shape', (t) => {
   const { hrpc } = scaffold()
   const rpc = hrpc.namespace('test')
@@ -52,18 +66,60 @@ test('primitives-only schema omits the resolve param', (t) => {
   t.absent(code.includes('resolve('))
 })
 
-test('stream handler throws UNSUPPORTED_HANDLER', (t) => {
+test('response-stream generates a typed incoming client + dispatcher', (t) => {
   const { hrpc } = scaffold()
   hrpc.namespace('test').register({
-    name: 'streamy',
+    name: 'feed',
     request: { name: '@test/req', stream: false },
     response: { name: '@test/res', stream: true }
   })
+  const code = generatePython(hrpc)
+  t.ok(code.includes('from bare_rpc import RPC, RPCRemoteError'), 'imports RPCRemoteError')
+  t.ok(code.includes('class _IncomingStream:'), 'emits incoming wrapper')
+  t.ok(code.includes('class _OutgoingStream:'), 'emits outgoing wrapper')
+  t.ok(code.includes('    async def feed(self, request=None):'), 'client method shape')
+  t.ok(
+    code.includes('stream = await self._rpc.request_with_response_stream(0, data)'),
+    'uses transport response-stream call'
+  )
+  t.ok(
+    code.includes('return _IncomingStream(stream, self._response_codecs[0])'),
+    'wraps incoming with response codec'
+  )
+  t.ok(code.includes('self._response_stream_commands = {0}'), 'response-stream id set')
+  t.ok(code.includes('async def _dispatch_response_stream(self, req):'), 'dispatcher present')
+})
+
+test('request-stream generates a typed outgoing + reply coroutine + dispatcher', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({
+    name: 'upload',
+    request: { name: '@test/req', stream: true },
+    response: { name: '@test/res', stream: false }
+  })
+  const code = generatePython(hrpc)
+  t.ok(code.includes('    async def upload(self):'), 'client method shape (no request arg)')
+  t.ok(code.includes('outgoing, future = await self._rpc.stream_request(0)'), 'uses stream_request')
+  t.ok(
+    code.includes(
+      'return _OutgoingStream(outgoing, self._request_codecs[0]), self._await_response(0, future)'
+    ),
+    'returns typed outgoing + reply coroutine'
+  )
+  t.ok(code.includes('async def _await_response(self, command, future):'), 'reply helper present')
+  t.ok(code.includes('self._request_stream_commands = {0}'), 'request-stream id set')
+  t.ok(code.includes('async def _dispatch_request_stream(self, req):'), 'dispatcher present')
+  t.ok(code.includes('        if req.request_stream is not None:'), 'router checks request stream')
+})
+
+test('request-stream with no response throws STREAM_WITHOUT_RESPONSE (not MISSING_RESPONSE)', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({ name: 'lonely', request: { name: '@test/req', stream: true } })
   try {
     generatePython(hrpc)
     t.fail('expected throw')
   } catch (err) {
-    t.is(err.code, 'UNSUPPORTED_HANDLER')
+    t.is(err.code, 'STREAM_WITHOUT_RESPONSE')
   }
 })
 
@@ -106,17 +162,13 @@ test('toDisk writes both files, and nothing on throw', (t) => {
   t.ok(fs.existsSync(path.join(out, 'hrpc.py')))
 
   const { hrpc: bad } = scaffold()
-  bad.namespace('test').register({
-    name: 'streamy',
-    request: { name: '@test/req', stream: true },
-    response: { name: '@test/res', stream: false }
-  })
+  bad.namespace('test').register({ name: 'streamy', request: { name: '@test/req', stream: true } })
   const out2 = fs.mkdtempSync(path.join(os.tmpdir(), 'hrpc-out2-'))
   try {
     PythonHRPC.toDisk(bad, out2)
     t.fail('expected throw')
   } catch (err) {
-    t.is(err.code, 'UNSUPPORTED_HANDLER')
+    t.is(err.code, 'STREAM_WITHOUT_RESPONSE')
   }
   t.absent(fs.existsSync(path.join(out2, 'hrpc.json')))
   t.absent(fs.existsSync(path.join(out2, 'hrpc.py')))
@@ -157,6 +209,29 @@ test('a client method and an on_ registration cannot collide', (t) => {
   } catch (err) {
     t.is(err.code, 'DUPLICATE_METHOD_NAME')
   }
+})
+
+test('duplex generates typed outgoing + incoming + dispatcher', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({
+    name: 'chat',
+    request: { name: '@test/req', stream: true },
+    response: { name: '@test/res', stream: true }
+  })
+  const code = generatePython(hrpc)
+  t.ok(code.includes('    async def chat(self):'), 'client method shape')
+  t.ok(
+    code.includes('outgoing, incoming = await self._rpc.create_bidirectional_stream(0)'),
+    'uses create_bidirectional_stream'
+  )
+  t.ok(
+    code.includes(
+      'return _OutgoingStream(outgoing, self._request_codecs[0]), _IncomingStream(incoming, self._response_codecs[0])'
+    ),
+    'returns both typed halves'
+  )
+  t.ok(code.includes('self._duplex_commands = {0}'), 'duplex id set')
+  t.ok(code.includes('async def _dispatch_duplex(self, req):'), 'dispatcher present')
 })
 
 test('a handler mapping to a python keyword throws', (t) => {
