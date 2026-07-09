@@ -90,6 +90,39 @@ test('response-stream generates a typed incoming client + dispatcher', (t) => {
   t.ok(code.includes('async def _dispatch_response_stream(self, req):'), 'dispatcher present')
 })
 
+test('request-stream generates a typed outgoing + reply coroutine + dispatcher', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({
+    name: 'upload',
+    request: { name: '@test/req', stream: true },
+    response: { name: '@test/res', stream: false }
+  })
+  const code = generatePython(hrpc)
+  t.ok(code.includes('    async def upload(self):'), 'client method shape (no request arg)')
+  t.ok(code.includes('outgoing, future = await self._rpc.stream_request(0)'), 'uses stream_request')
+  t.ok(
+    code.includes(
+      'return _OutgoingStream(outgoing, self._request_codecs[0]), self._await_response(0, future)'
+    ),
+    'returns typed outgoing + reply coroutine'
+  )
+  t.ok(code.includes('async def _await_response(self, command, future):'), 'reply helper present')
+  t.ok(code.includes('self._request_stream_commands = {0}'), 'request-stream id set')
+  t.ok(code.includes('async def _dispatch_request_stream(self, req):'), 'dispatcher present')
+  t.ok(code.includes('        if req.request_stream is not None:'), 'router checks request stream')
+})
+
+test('request-stream with no response throws STREAM_WITHOUT_RESPONSE (not MISSING_RESPONSE)', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({ name: 'lonely', request: { name: '@test/req', stream: true } })
+  try {
+    generatePython(hrpc)
+    t.fail('expected throw')
+  } catch (err) {
+    t.is(err.code, 'STREAM_WITHOUT_RESPONSE')
+  }
+})
+
 test('bool type throws UNSUPPORTED_TYPE', (t) => {
   const { hrpc } = scaffold()
   hrpc.namespace('test').register({
@@ -129,17 +162,13 @@ test('toDisk writes both files, and nothing on throw', (t) => {
   t.ok(fs.existsSync(path.join(out, 'hrpc.py')))
 
   const { hrpc: bad } = scaffold()
-  bad.namespace('test').register({
-    name: 'streamy',
-    request: { name: '@test/req', stream: true },
-    response: { name: '@test/res', stream: false }
-  })
+  bad.namespace('test').register({ name: 'streamy', request: { name: '@test/req', stream: true } })
   const out2 = fs.mkdtempSync(path.join(os.tmpdir(), 'hrpc-out2-'))
   try {
     PythonHRPC.toDisk(bad, out2)
     t.fail('expected throw')
   } catch (err) {
-    t.is(err.code, 'UNSUPPORTED_HANDLER')
+    t.is(err.code, 'STREAM_WITHOUT_RESPONSE')
   }
   t.absent(fs.existsSync(path.join(out2, 'hrpc.json')))
   t.absent(fs.existsSync(path.join(out2, 'hrpc.py')))

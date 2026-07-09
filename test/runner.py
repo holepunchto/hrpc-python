@@ -87,9 +87,60 @@ async def scenario_response_stream():
     return result
 
 
+async def scenario_request_stream():
+    result = {}
+
+    # happy path
+    a, b = make_pair()
+
+    async def on_upload(incoming):
+        total = 0
+        async for chunk in incoming:
+            total += chunk["seq"]
+        return {"total": total}
+
+    b.on_upload(on_upload)
+    outgoing, reply = await a.upload()
+    for i in range(3):
+        await outgoing.write({"seq": i})
+    await outgoing.end()
+    result["reply"] = await reply
+
+    # handler error
+    a2, b2 = make_pair()
+
+    async def on_upload_error(incoming):
+        async for _ in incoming:
+            pass
+        raise ValueError("boom")
+
+    b2.on_upload(on_upload_error)
+    outgoing2, reply2 = await a2.upload()
+    await outgoing2.write({"seq": 0})
+    await outgoing2.end()
+    try:
+        await reply2
+        result["error_code"] = None
+    except RPCRemoteError as err:
+        result["error_code"] = err.code
+
+    # no handler
+    a3, _ = make_pair()
+    outgoing3, reply3 = await a3.upload()
+    await outgoing3.end()
+    try:
+        await reply3
+        result["no_handler_code"] = None
+    except RPCRemoteError as err:
+        result["no_handler_code"] = err.code
+
+    return result
+
+
 SCENARIOS = {
     "unary": scenario_unary,
     "response_stream": scenario_response_stream,
+    "request_stream": scenario_request_stream,
 }
 
 

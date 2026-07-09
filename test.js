@@ -72,3 +72,29 @@ test('response-stream roundtrip + destroy + no-handler over an in-memory pair', 
   t.is(out.destroy_code, 'BOOM', 'destroy error propagates with code')
   t.is(out.no_handler_code, 'NO_HANDLER', 'missing handler rejects')
 })
+
+test('request-stream roundtrip + handler-error + no-handler over an in-memory pair', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hrpc-qs-'))
+
+  const schema = new Hyperschema(null, {})
+  const ns = schema.namespace('test')
+  ns.register({ name: 'up-chunk', fields: [{ name: 'seq', type: 'uint', required: true }] })
+  ns.register({ name: 'up-res', fields: [{ name: 'total', type: 'uint', required: true }] })
+  Hyperschema.toDisk(schema, dir)
+
+  const hrpc = PythonHRPC.from(dir, dir)
+  hrpc.namespace('test').register({
+    name: 'upload',
+    request: { name: '@test/up-chunk', stream: true },
+    response: { name: '@test/up-res', stream: false }
+  })
+  PythonHRPC.toDisk(hrpc, dir)
+
+  const res = spawnSync(PYTHON, [RUNNER, dir, 'request_stream'], { encoding: 'utf-8' })
+  t.is(res.status, 0, `runner exited 0\n${res.stderr}`)
+  if (res.status !== 0) return
+  const out = JSON.parse(res.stdout)
+  t.alike(out.reply, { total: 3 }, 'typed aggregate reply')
+  t.is(out.error_code, 'HANDLER_ERROR', 'handler error rejects the reply')
+  t.is(out.no_handler_code, 'NO_HANDLER', 'missing handler rejects the reply')
+})
