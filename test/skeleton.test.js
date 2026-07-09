@@ -66,19 +66,28 @@ test('primitives-only schema omits the resolve param', (t) => {
   t.absent(code.includes('resolve('))
 })
 
-test('stream handler throws UNSUPPORTED_HANDLER', (t) => {
+test('response-stream generates a typed incoming client + dispatcher', (t) => {
   const { hrpc } = scaffold()
   hrpc.namespace('test').register({
-    name: 'streamy',
+    name: 'feed',
     request: { name: '@test/req', stream: false },
     response: { name: '@test/res', stream: true }
   })
-  try {
-    generatePython(hrpc)
-    t.fail('expected throw')
-  } catch (err) {
-    t.is(err.code, 'UNSUPPORTED_HANDLER')
-  }
+  const code = generatePython(hrpc)
+  t.ok(code.includes('from bare_rpc import RPC, RPCRemoteError'), 'imports RPCRemoteError')
+  t.ok(code.includes('class _IncomingStream:'), 'emits incoming wrapper')
+  t.ok(code.includes('class _OutgoingStream:'), 'emits outgoing wrapper')
+  t.ok(code.includes('    async def feed(self, request=None):'), 'client method shape')
+  t.ok(
+    code.includes('stream = await self._rpc.request_with_response_stream(0, data)'),
+    'uses transport response-stream call'
+  )
+  t.ok(
+    code.includes('return _IncomingStream(stream, self._response_codecs[0])'),
+    'wraps incoming with response codec'
+  )
+  t.ok(code.includes('self._response_stream_commands = {0}'), 'response-stream id set')
+  t.ok(code.includes('async def _dispatch_response_stream(self, req):'), 'dispatcher present')
 })
 
 test('bool type throws UNSUPPORTED_TYPE', (t) => {

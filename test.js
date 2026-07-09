@@ -46,3 +46,29 @@ test('unary roundtrip + send event over an in-memory pair', (t) => {
   t.alike(out.response, { sum: 5 }, 'unary response decoded')
   t.alike(out.events, ['hi'], 'send event delivered')
 })
+
+test('response-stream roundtrip + destroy + no-handler over an in-memory pair', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'hrpc-rs-'))
+
+  const schema = new Hyperschema(null, {})
+  const ns = schema.namespace('test')
+  ns.register({ name: 'feed-req', fields: [{ name: 'count', type: 'uint', required: true }] })
+  ns.register({ name: 'chunk', fields: [{ name: 'seq', type: 'uint', required: true }] })
+  Hyperschema.toDisk(schema, dir)
+
+  const hrpc = PythonHRPC.from(dir, dir)
+  hrpc.namespace('test').register({
+    name: 'feed',
+    request: { name: '@test/feed-req', stream: false },
+    response: { name: '@test/chunk', stream: true }
+  })
+  PythonHRPC.toDisk(hrpc, dir)
+
+  const res = spawnSync(PYTHON, [RUNNER, dir, 'response_stream'], { encoding: 'utf-8' })
+  t.is(res.status, 0, `runner exited 0\n${res.stderr}`)
+  if (res.status !== 0) return
+  const out = JSON.parse(res.stdout)
+  t.alike(out.chunks, [{ seq: 0 }, { seq: 1 }, { seq: 2 }], 'typed chunks in order')
+  t.is(out.destroy_code, 'BOOM', 'destroy error propagates with code')
+  t.is(out.no_handler_code, 'NO_HANDLER', 'missing handler rejects')
+})

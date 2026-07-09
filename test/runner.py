@@ -5,6 +5,7 @@ import sys
 sys.path.insert(0, sys.argv[1])  # temp dir holding generated schema.py + hrpc.py
 
 import schema  # noqa: E402
+from bare_rpc import RPCRemoteError  # noqa: E402
 from hrpc import HRPC  # noqa: E402
 
 
@@ -22,7 +23,7 @@ def make_pair():
     return holder["a"], holder["b"]
 
 
-async def main():
+async def scenario_unary():
     events = []
     a, b = make_pair()
 
@@ -37,12 +38,65 @@ async def main():
 
     response = await a.command_a({"x": 2, "y": 3})
     await a.notify("hi")
-    for _ in range(100):  # let the detached event-dispatch task run
+    for _ in range(100):
         if events:
             break
         await asyncio.sleep(0)
 
-    print(json.dumps({"response": response, "events": events}))
+    return {"response": response, "events": events}
+
+
+async def scenario_response_stream():
+    result = {}
+
+    # happy path
+    a, b = make_pair()
+
+    async def on_feed(request, outgoing):
+        for i in range(request["count"]):
+            await outgoing.write({"seq": i})
+        await outgoing.end()
+
+    b.on_feed(on_feed)
+    stream = await a.feed({"count": 3})
+    result["chunks"] = [chunk async for chunk in stream]
+
+    # destroy propagation
+    a2, b2 = make_pair()
+
+    async def on_feed_destroy(request, outgoing):
+        await outgoing.destroy(RPCRemoteError("nope", "BOOM", 0))
+
+    b2.on_feed(on_feed_destroy)
+    stream2 = await a2.feed({"count": 1})
+    try:
+        async for _ in stream2:
+            pass
+        result["destroy_code"] = None
+    except RPCRemoteError as err:
+        result["destroy_code"] = err.code
+
+    # no handler
+    a3, _ = make_pair()
+    try:
+        await a3.feed({"count": 1})
+        result["no_handler_code"] = None
+    except RPCRemoteError as err:
+        result["no_handler_code"] = err.code
+
+    return result
+
+
+SCENARIOS = {
+    "unary": scenario_unary,
+    "response_stream": scenario_response_stream,
+}
+
+
+async def main():
+    name = sys.argv[2] if len(sys.argv) > 2 else "unary"
+    result = await asyncio.wait_for(SCENARIOS[name](), 5)
+    print(json.dumps(result))
 
 
 asyncio.run(main())
