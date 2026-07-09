@@ -211,6 +211,29 @@ test('a client method and an on_ registration cannot collide', (t) => {
   }
 })
 
+test('duplex generates typed outgoing + incoming + dispatcher', (t) => {
+  const { hrpc } = scaffold()
+  hrpc.namespace('test').register({
+    name: 'chat',
+    request: { name: '@test/req', stream: true },
+    response: { name: '@test/res', stream: true }
+  })
+  const code = generatePython(hrpc)
+  t.ok(code.includes('    async def chat(self):'), 'client method shape')
+  t.ok(
+    code.includes('outgoing, incoming = await self._rpc.create_bidirectional_stream(0)'),
+    'uses create_bidirectional_stream'
+  )
+  t.ok(
+    code.includes(
+      'return _OutgoingStream(outgoing, self._request_codecs[0]), _IncomingStream(incoming, self._response_codecs[0])'
+    ),
+    'returns both typed halves'
+  )
+  t.ok(code.includes('self._duplex_commands = {0}'), 'duplex id set')
+  t.ok(code.includes('async def _dispatch_duplex(self, req):'), 'dispatcher present')
+})
+
 test('a handler mapping to a python keyword throws', (t) => {
   const { hrpc } = scaffold()
   hrpc.namespace('test').register({

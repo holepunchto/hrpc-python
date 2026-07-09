@@ -137,10 +137,106 @@ async def scenario_request_stream():
     return result
 
 
+async def scenario_duplex():
+    result = {}
+
+    # happy path (request {n} -> response {label})
+    a, b = make_pair()
+
+    async def on_chat(incoming, outgoing):
+        async for chunk in incoming:
+            await outgoing.write({"label": "n" + str(chunk["n"])})
+        await outgoing.end()
+
+    b.on_chat(on_chat)
+    outgoing, incoming = await a.chat()
+    await outgoing.write({"n": 1})
+    await outgoing.write({"n": 2})
+    await outgoing.end()
+    result["labels"] = [chunk async for chunk in incoming]
+
+    # handler error -> both halves destroyed
+    a2, b2 = make_pair()
+
+    async def on_chat_error(incoming, outgoing):
+        async for _ in incoming:
+            pass
+        raise ValueError("boom")
+
+    b2.on_chat(on_chat_error)
+    outgoing2, incoming2 = await a2.chat()
+    await outgoing2.write({"n": 1})
+    await outgoing2.end()
+    try:
+        async for _ in incoming2:
+            pass
+        result["error_code"] = None
+    except RPCRemoteError as err:
+        result["error_code"] = err.code
+
+    # no handler
+    a3, _ = make_pair()
+    try:
+        await a3.chat()
+        result["no_handler_code"] = None
+    except RPCRemoteError as err:
+        result["no_handler_code"] = err.code
+
+    return result
+
+
+async def scenario_coexistence():
+    a, b = make_pair()
+
+    async def on_command_a(request):
+        return {"sum": request["x"] + request["y"]}
+
+    async def on_feed(request, outgoing):
+        for i in range(request["count"]):
+            await outgoing.write({"seq": i})
+        await outgoing.end()
+
+    async def on_upload(incoming):
+        total = 0
+        async for chunk in incoming:
+            total += chunk["seq"]
+        return {"total": total}
+
+    async def on_chat(incoming, outgoing):
+        async for chunk in incoming:
+            await outgoing.write({"label": "n" + str(chunk["n"])})
+        await outgoing.end()
+
+    b.on_command_a(on_command_a)
+    b.on_feed(on_feed)
+    b.on_upload(on_upload)
+    b.on_chat(on_chat)
+
+    unary = await a.command_a({"x": 2, "y": 3})
+
+    feed_stream = await a.feed({"count": 2})
+    feed = [chunk async for chunk in feed_stream]
+
+    up_out, up_reply = await a.upload()
+    for i in range(3):
+        await up_out.write({"seq": i})
+    await up_out.end()
+    upload = await up_reply
+
+    chat_out, chat_in = await a.chat()
+    await chat_out.write({"n": 7})
+    await chat_out.end()
+    chat = [chunk async for chunk in chat_in]
+
+    return {"unary": unary, "feed": feed, "upload": upload, "chat": chat}
+
+
 SCENARIOS = {
     "unary": scenario_unary,
     "response_stream": scenario_response_stream,
     "request_stream": scenario_request_stream,
+    "duplex": scenario_duplex,
+    "coexistence": scenario_coexistence,
 }
 
 
