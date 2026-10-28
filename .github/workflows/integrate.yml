@@ -25,10 +25,10 @@ jobs:
     name: Test
     steps:
       - uses: holepunchto/actions/node-base@v1
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      - uses: holepunchto/actions/setup-python@v1
+      - uses: holepunchto/actions/install-pip-dependencies@v1
         with:
-          python-version: '3.12'
-      - run: python3 -m venv .venv
-      - run: .venv/bin/pip install "git+https://github.com/holepunchto/compact-encoding-python"
-      - run: .venv/bin/pip install "git+https://github.com/holepunchto/bare-rpc-python"
+          packages: compact-encoding~=0.1.0 bare-rpc~=0.1.0
       - run: npm test
+        env:
+          HRPC_PYTHON: python

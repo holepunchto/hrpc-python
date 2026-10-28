@@ -7,20 +7,12 @@ sys.path.insert(0, sys.argv[1])  # temp dir holding generated schema.py + hrpc.p
 import schema  # noqa: E402
 from bare_rpc import RPCRemoteError  # noqa: E402
 from hrpc import HRPC  # noqa: E402
+from pipe import pair  # noqa: E402
 
 
 def make_pair():
-    holder = {}
-
-    async def send_a(frame):
-        await holder["b"].receive(frame)
-
-    async def send_b(frame):
-        await holder["a"].receive(frame)
-
-    holder["a"] = HRPC(send_a, schema.resolve)
-    holder["b"] = HRPC(send_b, schema.resolve)
-    return holder["a"], holder["b"]
+    left, right = pair()
+    return HRPC(left, schema.resolve), HRPC(right, schema.resolve)
 
 
 async def scenario_unary():
