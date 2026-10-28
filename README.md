@@ -14,7 +14,7 @@ HRPC.toDisk(hrpc, './spec/python')
 // writes ./spec/python/{schema.py, hrpc.json, hrpc.py}
 ```
 
-The generated `hrpc.py` exposes an `HRPC` class: `rpc = HRPC(send, resolve)` (pass `schema.resolve`), then `await rpc.<command>(request)` for unary calls and `rpc.on_<command>(handler)` to serve them. Send (fire-and-forget), response-stream, request-stream, and duplex commands are generated too - see [Streams](#streams) below.
+The generated `hrpc.py` exposes an `HRPC` class: `rpc = HRPC(transport, resolve)` (pass `schema.resolve`), where `transport` is a [bare-rpc-python](https://github.com/holepunchto/bare-rpc-python) `Transport`, such as a `Sidecar` or a `StreamTransport`. Then `await rpc.<command>(request)` for unary calls and `rpc.on_<command>(handler)` to serve them. Send (fire-and-forget), response-stream, request-stream, and duplex commands are generated too, as described in [Streams](#streams) below. Close the session with `await rpc.close()`, or by leaving `async with`.
 
 ## Streams
 
@@ -71,3 +71,7 @@ async def on_chat(incoming, outgoing):
 
 hrpc.on_chat(on_chat)
 ```
+
+## License
+
+Apache-2.0

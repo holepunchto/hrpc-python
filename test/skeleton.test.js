@@ -43,7 +43,7 @@ test('unary + send generate the expected class shape', (t) => {
   rpc.register({ name: 'notify', request: { name: 'string', stream: false, send: true } })
 
   const code = generatePython(hrpc)
-  t.ok(code.includes('def __init__(self, send, resolve):'), 'resolve injected')
+  t.ok(code.includes('def __init__(self, transport, resolve):'), 'resolve injected')
   t.ok(code.includes('resolve("@test/req")'), 'registered type via resolve')
   t.ok(code.includes('async def command_a(self, request=None):'))
   t.ok(code.includes('await self._rpc.request(0, data)'), 'unary uses request + id')
@@ -62,7 +62,7 @@ test('primitives-only schema omits the resolve param', (t) => {
     response: { name: 'string', stream: false }
   })
   const code = generatePython(hrpc)
-  t.ok(code.includes('def __init__(self, send):'), 'no resolve param')
+  t.ok(code.includes('def __init__(self, transport):'), 'no resolve param')
   t.absent(code.includes('resolve('))
 })
 
@@ -175,10 +175,10 @@ test('toDisk writes both files, and nothing on throw', (t) => {
   t.ok(dir)
 })
 
-test('a handler named receive collides with the transport method', (t) => {
+test('a handler named close collides with the lifecycle method', (t) => {
   const { hrpc } = scaffold()
   hrpc.namespace('test').register({
-    name: 'receive',
+    name: 'close',
     request: { name: 'string', stream: false },
     response: { name: 'string', stream: false }
   })

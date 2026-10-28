@@ -6,24 +6,14 @@ sys.path.insert(0, sys.argv[1])  # temp dir holding generated schema.py + hrpc.p
 
 import schema  # noqa: E402
 from hrpc import HRPC  # noqa: E402
+from pipe import pair  # noqa: E402
 
 
 def make_pair():
     """A client/server pair that records every frame each side puts on the wire."""
-    holder = {}
     sent = []
-
-    async def send_a(frame):
-        sent.append(bytes(frame).hex())
-        await holder["b"].receive(frame)
-
-    async def send_b(frame):
-        sent.append(bytes(frame).hex())
-        await holder["a"].receive(frame)
-
-    holder["a"] = HRPC(send_a, schema.resolve)
-    holder["b"] = HRPC(send_b, schema.resolve)
-    return holder["a"], holder["b"], sent
+    left, right = pair(sent)
+    return HRPC(left, schema.resolve), HRPC(right, schema.resolve), sent
 
 
 async def main():
@@ -49,7 +39,7 @@ async def main():
             break
         await asyncio.sleep(0)
 
-    json.dump({"frames": sent, "response": response, "served": served}, sys.stdout)
+    json.dump({"frames": [frame.hex() for frame in sent], "response": response, "served": served}, sys.stdout)
 
 
 asyncio.run(main())

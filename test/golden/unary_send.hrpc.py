@@ -4,7 +4,7 @@ from bare_rpc import RPC
 
 
 class HRPC:
-    def __init__(self, send, resolve):
+    def __init__(self, transport, resolve):
         self._handlers = {}
         self._request_codecs = {
             0: resolve("@test/req"),
@@ -13,10 +13,16 @@ class HRPC:
         self._response_codecs = {
             0: resolve("@test/res"),
         }
-        self._rpc = RPC(send, on_request=self._on_request, on_event=self._on_event)
+        self._rpc = RPC(transport, on_request=self._on_request, on_event=self._on_event)
 
-    async def receive(self, data):
-        await self._rpc.receive(data)
+    async def close(self):
+        await self._rpc.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        await self.close()
 
     async def command_a(self, request=None):
         data = None if request is None else c.encode(self._request_codecs[0], request)
