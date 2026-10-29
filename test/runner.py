@@ -223,8 +223,21 @@ async def scenario_coexistence():
     return {"unary": unary, "feed": feed, "upload": upload, "chat": chat}
 
 
+async def scenario_close():
+    left, right = pair()
+    async with HRPC(left, schema.resolve) as a:
+        await a.notify("bye")
+
+    frames = 0
+    while await right.read():
+        frames += 1
+
+    return {"frames": frames}
+
+
 SCENARIOS = {
     "unary": scenario_unary,
+    "close": scenario_close,
     "response_stream": scenario_response_stream,
     "request_stream": scenario_request_stream,
     "duplex": scenario_duplex,

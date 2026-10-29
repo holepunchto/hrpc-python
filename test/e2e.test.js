@@ -43,6 +43,11 @@ test('unary roundtrip + send event over an in-memory pair', (t) => {
   const out = JSON.parse(res.stdout)
   t.alike(out.response, { sum: 5 }, 'unary response decoded')
   t.alike(out.events, ['hi'], 'send event delivered')
+
+  const closed = spawnSync(PYTHON, [RUNNER, dir, 'close'], { encoding: 'utf-8' })
+  t.is(closed.status, 0, `close runner exited 0\n${closed.stderr}`)
+  if (closed.status !== 0) return
+  t.is(JSON.parse(closed.stdout).frames, 1, 'leaving async with ends the peer after pending frames')
 })
 
 test('response-stream roundtrip + destroy + no-handler over an in-memory pair', (t) => {
