@@ -57,7 +57,7 @@ async def scenario_response_stream():
     a2, b2 = make_pair()
 
     async def on_feed_destroy(request, outgoing):
-        await outgoing.destroy(RPCRemoteError("nope", "BOOM", 0))
+        outgoing.destroy(RPCRemoteError("nope", "BOOM", 0))
 
     b2.on_feed(on_feed_destroy)
     stream2 = await a2.feed({"count": 1})

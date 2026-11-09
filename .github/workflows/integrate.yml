@@ -28,7 +28,7 @@ jobs:
       - uses: holepunchto/actions/setup-python@v1
       - uses: holepunchto/actions/install-pip-dependencies@v1
         with:
-          packages: compact-encoding~=0.1.0 bare-rpc~=0.1.0
+          packages: compact-encoding~=0.1.0 bare-rpc~=0.2.0
       - run: npm test
         env:
           HRPC_PYTHON: python
